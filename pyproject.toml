@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-eval-kit"
+version = "0.0.1"
+description = "The shared evaluation scaffold for hexagonal service repos: the EvalReport/EvalMetricResult types and their rendering, a run_eval.py --mode smoke|gate CLI scaffold (offline heuristic vs a shared promotion authority), a promotion-gate HTTP client (structured target, registered bundle, results[] parse, POST gate), a not-falsely-green harness that turns 'prove this metric can go red' into a one-liner, and an offline narrative-quality judge with per-vertical quality floors (deterministic by default, a local model server by opt-in). Pure standard library except the two HTTP clients (httpx)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Ashish Awasthi" }]
+keywords = [
+  "evaluation", "eval-gate", "model-risk", "llm-eval", "smoke-test",
+  "promotion-gate", "not-falsely-green", "hexagonal", "ports-and-adapters",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Testing",
+  "Typing :: Typed",
+]
+
+# The report, modes and harness layers are pure stdlib. Only the gate client needs an HTTP
+# client, so httpx is the single runtime dependency.
+dependencies = ["httpx>=0.27"]
+
+[project.optional-dependencies]
+# The test/lint toolchain. Ruff is pinned EXACTLY so formatting never drifts across machines.
+# respx mocks the gate endpoints so the gate-client contract test never talks to a real service.
+dev = [
+  "ruff==0.15.18",
+  "mypy>=1.10",
+  "pytest>=8.2",
+  "respx>=0.21",
+]
+
+[project.urls]
+Homepage = "https://github.com/portable-genai/agent-eval-kit"
+Source = "https://github.com/portable-genai/agent-eval-kit"
+Issues = "https://github.com/portable-genai/agent-eval-kit/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_eval_kit"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
