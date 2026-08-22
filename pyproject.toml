@@ -31,7 +31,7 @@ dependencies = ["httpx>=0.27"]
 # The test/lint toolchain. Ruff is pinned EXACTLY so formatting never drifts across machines.
 # respx mocks the gate endpoints so the gate-client contract test never talks to a real service.
 dev = [
-  "ruff==0.15.18",
+  "ruff==0.16.3",
   "mypy>=1.10",
   "pytest>=8.2",
   "respx>=0.21",
