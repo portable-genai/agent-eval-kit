@@ -125,6 +125,71 @@ model-backed judge speaks OpenAI-compatible chat completions with NO `/v1` prefi
 a local MLX server serves; pass `path="/v1/chat/completions"` for a server that uses the
 conventional prefix.
 
+## Where this runs in hosted CI
+
+The fleet's hosted gate runs on Google Cloud Build: every CI-enabled service builds on each
+pull request and each push to `main`, inside a digest-pinned runner image, executing the same
+`make` gate the repository runs on a laptop. This kit is the eval layer inside that gate: a
+service's `eval/run_eval.py` is `eval_main` wrapped around the service's own scorers, so one
+command produces the same fail-closed verdict locally and in the hosted runner.
+
+### The setup
+
+```mermaid
+flowchart LR
+  subgraph GH["GitHub org: portable-genai"]
+    PR["Pull request"]
+    PUSH["Push to main"]
+  end
+  subgraph GCP["Cloud Build project"]
+    CONN["Cloud Build v2 connection<br/>GitHub App on the org"]
+    TRIG["Per-repo triggers<br/>pr-* and main-*"]
+    AR["Artifact Registry<br/>digest-pinned runner image"]
+    RUNNER["runner container<br/>run-grc-ci"]
+  end
+  PR --> CONN
+  PUSH --> CONN
+  CONN --> TRIG
+  TRIG --> RUNNER
+  AR -->|image by digest| RUNNER
+  RUNNER --> GATE["make gate / make check<br/>lint, types, tests, eval"]
+  GATE --> EVAL["run_eval.py --mode smoke<br/>this kit's eval_main"]
+  EVAL --> STATUS["required status check<br/>on the pull request"]
+```
+
+A trigger exists only for a repository with a reviewed job contract: the contract names the
+make target, the runtime image and the lockfile the runner installs, and a repository without
+one stays on its local gate. Where the pull-request check is required by ruleset, a red eval
+blocks the merge and a direct push to `main` is refused outright.
+
+### A pull-request run
+
+```mermaid
+sequenceDiagram
+    participant Dev as Developer
+    participant GH as GitHub
+    participant CB as Cloud Build
+    participant R as Runner container
+    participant K as agent-eval-kit
+
+    Dev->>GH: open pull request
+    GH->>CB: pr trigger fires (real event, not polling)
+    CB->>R: start runner, pinned by image digest
+    R->>R: pip install -r requirements-dev.lock
+    R->>R: make gate (lint, types, tests)
+    R->>K: run_eval.py --mode smoke
+    K-->>R: EvalReport, fail-closed exit code
+    R-->>CB: build result
+    CB-->>GH: status check green or red
+    GH-->>Dev: merge allowed only on green
+```
+
+Hosted CI runs `--mode smoke` deliberately: the smoke path is the deterministic offline
+scorer plus, where a service adopts it, the offline judge against its quality floors, so the
+hosted verdict needs no model server, no credentials and no network beyond the checkout.
+`--mode gate` calls the promotion authority over HTTP and runs where that authority is
+reachable, which a build-and-test runner intentionally is not.
+
 ## Install
 
 ```sh
