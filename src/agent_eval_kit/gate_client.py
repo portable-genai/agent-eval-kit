@@ -138,7 +138,9 @@ class PromotionGateClient:
 
     @classmethod
     def _parse_gate(cls, dataset_path: str, body: object) -> bool:
-        """Validate the complete Hrz4 GateDecision, never a naked aggregate boolean."""
+        """Validate the complete model-quality-gate GateDecision, never a
+        naked aggregate boolean.
+        """
         if not isinstance(body, dict):
             raise GateClientError("gate service promotion response must be a JSON object")
         raw_passed = body.get("passed")
