@@ -67,3 +67,30 @@ def assert_each_can_go_red[T](
         assert_can_go_red(
             score_fn, green=green, red=red, threshold=threshold, metric=f"{metric}[{name}]"
         )
+
+
+def prove_before_scoring(*proofs: Callable[[], None]) -> None:
+    """Run every falsification proof BEFORE a single golden score is trusted.
+
+    The ordering is the contribution, and it is the difference between a falsification proof
+    that guards a release and one that decorates a test suite. Run in ``tests/``, the proof
+    tells you the metric COULD have gone red on some machine at some point. Run as the first
+    statement of the scored run itself, it tells you the metric that is about to score this
+    corpus can go red, in this process, against this configuration, with these thresholds.
+
+    A metric that became tautological because a scorer was refactored, a threshold was loaded
+    from a stale rubric, or a pack file was emptied is caught here and nowhere else: those are
+    all states a test suite green ten minutes earlier does not describe.
+
+    Each proof is a zero-argument callable that raises on failure, so a repo writes its proofs
+    as ordinary functions closing over its own scorers and thresholds. The first failure
+    propagates unchanged: :class:`NotFalselyGreenError` already says which metric and which
+    direction, and wrapping it would bury that.
+    """
+    if not proofs:
+        raise NotFalselyGreenError(
+            "prove_before_scoring was called with no proofs, so nothing was proven and the "
+            "scored run that follows rests on an empty guarantee"
+        )
+    for proof in proofs:
+        proof()

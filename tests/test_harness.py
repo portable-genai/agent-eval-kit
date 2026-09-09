@@ -8,6 +8,7 @@ from agent_eval_kit.harness import (
     NotFalselyGreenError,
     assert_can_go_red,
     assert_each_can_go_red,
+    prove_before_scoring,
 )
 
 
@@ -69,3 +70,27 @@ def test_per_market_check_names_the_failing_market():
     }
     with pytest.raises(NotFalselyGreenError, match=r"pii_safety\[AU\]"):
         assert_each_can_go_red(_leak_scorer, cases, threshold=0.99, metric="pii_safety")
+
+
+# --------------------------------------------------------------------------- #
+# Falsification BEFORE scoring, which is where it guards a release
+# --------------------------------------------------------------------------- #
+def test_prove_before_scoring_runs_every_proof_in_order():
+    ran: list[str] = []
+    prove_before_scoring(lambda: ran.append("a"), lambda: ran.append("b"))
+    assert ran == ["a", "b"]
+
+
+def test_the_first_failing_proof_propagates_unchanged():
+    """NotFalselyGreenError already says which metric and which direction; wrapping buries that."""
+
+    def falsely_green() -> None:
+        assert_can_go_red(lambda _: 1.0, green=1, red=0, threshold=0.9, metric="pii_safety")
+
+    with pytest.raises(NotFalselyGreenError, match="pii_safety: FALSELY GREEN"):
+        prove_before_scoring(falsely_green)
+
+
+def test_calling_it_with_no_proofs_is_an_empty_guarantee_and_is_refused():
+    with pytest.raises(NotFalselyGreenError, match="nothing was proven"):
+        prove_before_scoring()

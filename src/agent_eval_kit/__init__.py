@@ -17,6 +17,22 @@ One versioned source of truth for the evaluation layer a service re-implements:
 * **The per-vertical quality floors** (:mod:`agent_eval_kit.floors`) - the named number, held as
   data, below which a reduced (laptop / on-prem) profile is UNFIT for a vertical rather than
   merely degraded.
+* **The reviewed thresholds** (:mod:`agent_eval_kit.rubrics`) - read a metric's bar out of a
+  rubric file that carries the argument for it, and fail the build both when a metric has no
+  reviewed bar AND when a bar names no metric.
+* **The golden-set loader** (:mod:`agent_eval_kit.datasets`) - comment-tolerant JSONL, a content
+  digest, and refusal of the three shapes that make a gate report a number over nothing.
+* **The judged narrative run** (:mod:`agent_eval_kit.narrative`) - the whole
+  criteria-plus-floors-plus-expectation-table runner as one call.
+* **The replay** (:mod:`agent_eval_kit.replay`, :mod:`agent_eval_kit.recording`) - score the
+  rubrics against a REAL model's committed, scrubbed words, offline, and refuse a whole
+  recording batch on one leak rather than writing a scrubbed lie.
+* **Retrieval quality** (:mod:`agent_eval_kit.retrieval`) - recall@k, precision@k and MRR over
+  labelled query/passage pairs, measured upstream of what the model did with them.
+* **The denominator rule** (:mod:`agent_eval_kit.denominators`) - a 0.90 bar over seven
+  positives is a 1.0 wearing a 0.90 label, and this is the assertion that says so.
+* **The render-and-check golden set** (:mod:`agent_eval_kit.golden`) - inputs rendered from the
+  shipped demo data, expectations hand-written, staleness a build failure.
 
 The report/modes/harness/ports/judge/floors layers are pure stdlib; the gate client needs
 ``httpx``. Kept dependency-light: the gate client takes injectable auth headers so a consumer can
@@ -40,7 +56,28 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
-from . import floors, harness, judge, modes, report
+from . import (
+    datasets,
+    denominators,
+    floors,
+    golden,
+    harness,
+    judge,
+    modes,
+    narrative,
+    recording,
+    replay,
+    report,
+    retrieval,
+    rubrics,
+)
+from .datasets import DatasetError, dataset_digest, fraction, load_jsonl, warn_unmeasured
+from .denominators import (
+    DenominatorError,
+    assert_denominator_supports,
+    assert_each_denominator_supports,
+    required_positives,
+)
 from .floors import (
     FLOORS_SCHEMA,
     Fitness,
@@ -52,7 +89,13 @@ from .floors import (
     QualityFloors,
     load_quality_floors,
 )
-from .harness import NotFalselyGreenError, assert_can_go_red, assert_each_can_go_red
+from .golden import GoldenRenderError, render_main
+from .harness import (
+    NotFalselyGreenError,
+    assert_can_go_red,
+    assert_each_can_go_red,
+    prove_before_scoring,
+)
 from .judge import (
     CriterionScore,
     DeterministicNarrativeJudge,
@@ -67,15 +110,20 @@ from .judge import (
     build_judge,
 )
 from .modes import GateRunner, SmokeRunner, build_parser, eval_main
+from .narrative import Measured, NarrativeEvalError, narrative_main
 from .ports import EvaluationGatePort
+from .recording import Recorded, RecordingRefused, write_recordings
+from .replay import ReplayAdapter, ReplayError, recording_key
 from .report import EvalMetricResult, EvalReport, print_report
+from .retrieval import RetrievalCase, RetrievalError, RetrievalScores, score_retrieval
+from .rubrics import Rubric, RubricError, Rubrics, load_rubrics
 
 if TYPE_CHECKING:  # Type checkers resolve the deferred names statically; the runtime defers them.
     from . import gate_client, local_model_judge
     from .gate_client import GateClientError, PromotionGateClient
     from .local_model_judge import LocalModelJudge
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 #: The names served by :func:`__getattr__`, mapped to the submodule each one lives in. Both
 #: submodules speak HTTP, and neither may be in the import graph of a consumer's decision core.
@@ -113,6 +161,21 @@ def __dir__() -> list[str]:
 __all__ = [
     "FLOORS_SCHEMA",
     "CriterionScore",
+    "DatasetError",
+    "DenominatorError",
+    "GoldenRenderError",
+    "Measured",
+    "NarrativeEvalError",
+    "Recorded",
+    "RecordingRefused",
+    "ReplayAdapter",
+    "ReplayError",
+    "RetrievalCase",
+    "RetrievalError",
+    "RetrievalScores",
+    "Rubric",
+    "RubricError",
+    "Rubrics",
     "DeterministicNarrativeJudge",
     "EvaluationGatePort",
     "EvalMetricResult",
@@ -139,18 +202,40 @@ __all__ = [
     "SmokeRunner",
     "__version__",
     "assert_can_go_red",
+    "assert_denominator_supports",
     "assert_each_can_go_red",
+    "assert_each_denominator_supports",
     "assert_judge_can_go_red",
     "build_judge",
     "build_parser",
+    "dataset_digest",
+    "datasets",
+    "denominators",
     "eval_main",
     "floors",
+    "fraction",
     "gate_client",
+    "golden",
     "harness",
     "judge",
+    "load_jsonl",
     "load_quality_floors",
+    "load_rubrics",
     "local_model_judge",
     "modes",
+    "narrative",
+    "narrative_main",
     "print_report",
+    "prove_before_scoring",
+    "recording",
+    "recording_key",
+    "render_main",
+    "replay",
     "report",
+    "required_positives",
+    "retrieval",
+    "rubrics",
+    "score_retrieval",
+    "warn_unmeasured",
+    "write_recordings",
 ]
