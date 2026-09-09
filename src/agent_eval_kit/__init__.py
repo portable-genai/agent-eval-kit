@@ -123,7 +123,7 @@ if TYPE_CHECKING:  # Type checkers resolve the deferred names statically; the ru
     from .gate_client import GateClientError, PromotionGateClient
     from .local_model_judge import LocalModelJudge
 
-__version__ = "0.0.2"
+__version__ = "0.0.3"
 
 #: The names served by :func:`__getattr__`, mapped to the submodule each one lives in. Both
 #: submodules speak HTTP, and neither may be in the import graph of a consumer's decision core.

@@ -135,3 +135,72 @@ def test_it_reads_the_real_exemplar_tree_in_this_workspace():
     rubrics = load_rubrics(root, groups=("agent_assist", "self_service"))
     assert rubrics.group("self_service")["gate_precision"].threshold == 1.0
     assert rubrics.group("agent_assist")["pii_safety"].threshold == 0.99
+
+
+# --------------------------------------------------------------------------- #
+# Groups are independent, because a repository that gates two families reuses names
+# --------------------------------------------------------------------------- #
+def test_two_groups_may_carry_the_same_metric_name_with_different_bars(tmp_path):
+    """The case that proved the old keying wrong.
+
+    A repository gating a design review and a data-residency scan in one run legitimately has a
+    `citation_accuracy` in both: the same words, different questions, and possibly different
+    bars. Keyed by name alone, whichever file sorted last won and the other family's rubric
+    vanished from the tree while still sitting on disk looking authoritative.
+    """
+    root = _tree(
+        tmp_path / "rubrics",
+        {
+            "citation_accuracy.yaml": "metric: citation_accuracy\nthreshold: 0.90\n",
+            "residency/citation_accuracy.yaml": "metric: citation_accuracy\nthreshold: 0.99\n",
+        },
+    )
+    rubrics = load_rubrics(root)
+    assert rubrics.group("")["citation_accuracy"].threshold == 0.90
+    assert rubrics.group("residency")["citation_accuracy"].threshold == 0.99
+    assert len(rubrics) == 2
+    assert rubrics.groups == ("", "residency")
+
+
+def test_the_same_metric_at_the_same_bar_in_two_groups_is_fine(tmp_path):
+    """Equal bars are not a conflict, and each group still holds its own rubric."""
+    root = _tree(
+        tmp_path / "rubrics",
+        {
+            "a/safety.yaml": "metric: safety\nthreshold: 0.99\n",
+            "b/safety.yaml": "metric: safety\nthreshold: 0.99\n",
+        },
+    )
+    rubrics = load_rubrics(root)
+    assert len(rubrics) == 2
+    assert rubrics.group("a")["safety"].source.endswith("a/safety.yaml")
+    assert rubrics.group("b")["safety"].source.endswith("b/safety.yaml")
+
+
+def test_one_metric_one_bar_still_holds_inside_a_group(tmp_path):
+    """The rule keeps its meaning where it was always aimed: two files, one directory."""
+    root = _tree(
+        tmp_path / "rubrics",
+        {
+            "residency/one.yaml": "metric: safety\nthreshold: 0.99\n",
+            "residency/two.yaml": "metric: safety\nthreshold: 0.90\n",
+        },
+    )
+    with pytest.raises(RubricError, match="One metric, one bar"):
+        load_rubrics(root)
+
+
+def test_a_group_scoped_assert_covers_does_not_see_the_other_group(tmp_path):
+    """Narrowing to a group is what makes `assert_covers` answerable for a two-family repo."""
+    root = _tree(
+        tmp_path / "rubrics",
+        {
+            "principle_accuracy.yaml": "metric: principle_accuracy\nthreshold: 0.90\n",
+            "residency/detection.yaml": "metric: detection_recall\nthreshold: 0.90\n",
+        },
+    )
+    rubrics = load_rubrics(root)
+    rubrics.group("").assert_covers(["principle_accuracy"])
+    rubrics.group("residency").assert_covers(["detection_recall"])
+    with pytest.raises(RubricError, match="reads as governance"):
+        rubrics.assert_covers(["principle_accuracy"])
