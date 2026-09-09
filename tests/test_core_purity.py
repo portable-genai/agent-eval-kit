@@ -100,13 +100,104 @@ def test_the_pure_submodules_import_with_httpx_absent() -> None:
     """Each stdlib-only submodule, imported directly; each executes the package `__init__` too."""
     result = _run_with_blocked_imports(
         """
+        import agent_eval_kit.datasets
+        import agent_eval_kit.denominators
         import agent_eval_kit.floors
+        import agent_eval_kit.golden
         import agent_eval_kit.harness
         import agent_eval_kit.judge
         import agent_eval_kit.modes
+        import agent_eval_kit.narrative
         import agent_eval_kit.ports
+        import agent_eval_kit.recording
+        import agent_eval_kit.replay
         import agent_eval_kit.report
+        import agent_eval_kit.retrieval
+        import agent_eval_kit.rubrics
 
+        print("OK")
+        """
+    )
+    assert result.returncode == 0, result.stderr
+    assert "OK" in result.stdout
+
+
+def test_the_yaml_readers_import_and_run_their_non_yaml_paths_with_pyyaml_absent() -> None:
+    """PyYAML is an EXTRA, so the two modules that can read YAML must not need it to load.
+
+    A consumer's decision core reaches this package for its report types. A top-level
+    `import yaml` in the rubric or dataset loader would put a parser in that import graph for
+    the sake of a function no domain module calls, which is the same defect this package
+    already fixed once for the HTTP client. The import lives inside the one branch that needs
+    it, so every other format (.toml, .json, .jsonl) works with PyYAML uninstalled, and asking
+    for YAML without it raises an error that says what to install.
+    """
+    result = _run_with_blocked_imports(
+        """
+        import json
+        import tempfile
+        from pathlib import Path
+
+        NL = chr(10)
+
+        from agent_eval_kit.datasets import load_jsonl
+        from agent_eval_kit.rubrics import RubricError, load_rubrics
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "g.jsonl").write_text(NL.join(['# note', '{"id": "a", "kind": "routing"}', '']))
+            assert len(load_jsonl(root / "g.jsonl", kinds={"routing"})) == 1
+
+            rubrics = root / "rubrics"
+            rubrics.mkdir()
+            (rubrics / "a.toml").write_text(NL.join(['metric = "safety"', "threshold = 0.99", '']))
+            (rubrics / "b.json").write_text(json.dumps({"metric": "recall", "threshold": 0.9}))
+            assert load_rubrics(rubrics).thresholds() == {"safety": 0.99, "recall": 0.9}
+
+            (rubrics / "c.yaml").write_text(NL.join(["metric: grounded", "threshold: 0.8", '']))
+            try:
+                load_rubrics(rubrics)
+            except RubricError as exc:
+                assert "PyYAML" in str(exc), exc
+            else:
+                raise AssertionError("a YAML rubric loaded with PyYAML blocked")
+
+        print("OK")
+        """
+    )
+    assert result.returncode == 0, (
+        "the rubric or dataset loader needs PyYAML at import time, so every consumer's decision "
+        f"core would gain a parser: {result.stderr}"
+    )
+    assert "OK" in result.stdout
+
+
+def test_the_new_offline_surface_runs_end_to_end_with_every_client_blocked() -> None:
+    """The load-bearing claim of v0.0.2: all of it is a gate step, so none of it may reach out."""
+    result = _run_with_blocked_imports(
+        """
+        from agent_eval_kit import (
+            RetrievalCase,
+            assert_denominator_supports,
+            fraction,
+            prove_before_scoring,
+            recording_key,
+            required_positives,
+            score_retrieval,
+        )
+        from agent_eval_kit.denominators import DenominatorError
+
+        assert required_positives(0.90) == 10
+        assert fraction([]) == 0.0
+        assert score_retrieval([RetrievalCase("q", ("a",), ("a",))], k=3).recall_at_k == 1.0
+        assert len(recording_key("m", "p", ["a"])) == 64
+        prove_before_scoring(lambda: None)
+        try:
+            assert_denominator_supports(0.90, 7, metric="m")
+        except DenominatorError:
+            pass
+        else:
+            raise AssertionError("the denominator rule did not refuse a thin corpus")
         print("OK")
         """
     )

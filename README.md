@@ -3,10 +3,13 @@
 The shared **evaluation scaffold** for hexagonal (ports-and-adapters) service repos. One versioned
 source of truth for the eval layer applications re-implement: the report types, the `run_eval.py
 --mode smoke|gate` CLI, a promotion-gate HTTP client, a harness that makes "prove this metric
-can go red" a one-liner, and an offline narrative-quality judge with named per-vertical floors.
+can go red" a one-liner, reviewed thresholds read from rubric files, golden-set loading that
+refuses the vacuous shapes, retrieval-quality scoring, the denominator rule, offline replay of a
+real model's committed words, and a narrative-quality judge with named per-vertical floors.
 
-**Pure standard library except the two HTTP clients** (which need `httpx`) - and importing the
-package imports neither, so `httpx` never lands in a consumer's decision core. See
+**Pure standard library except the two HTTP clients** (which need `httpx`) **and the optional
+YAML readers** (which need `PyYAML`, an extra) - and importing the package imports none of them,
+so neither `httpx` nor a parser ever lands in a consumer's decision core. See
 [Design invariants](#design-invariants-do-not-fix-these).
 
 ## Why it exists
@@ -16,6 +19,20 @@ contract get pasted into every service and drift. Worse, an eval metric can quie
 to fail (a scorer reading its own output, a golden set that planted no target), so it is a constant
 1.0 that proves nothing. This package retires both: adopt the scaffold and the harness by a version
 bump.
+
+Five more gaps closed in v0.0.2, each a generalisation of a pattern that already worked in
+exactly one repository:
+
+| Module | What it retires | The failure it was written against |
+|---|---|---|
+| `rubrics` | A module-level `THRESHOLDS` dict | A bar written as a Python literal carries no argument: a reviewer reads that recall must clear 0.85 and cannot read why, who agreed it, or what moving it would mean. Both refusals are enforced: a metric with no reviewed bar, and **a bar that names no metric**, which is the direction that rots toward looking well governed. |
+| `datasets` | Eight lines of JSONL reading, per repo | Three recurring shapes make a gate report a number over nothing: a case kind no metric scores (it still counts toward `n_examples`), an empty selection scoring 1.0, and a corpus that moved without the report saying which one it was. |
+| `retrieval` | Nothing. There was no precedent | Eight retrieval ports were bound across the fleet with no metric on any of them, so a knowledge base that silently stopped returning the right document still scored a clean citation set: the answer cites what it was given, and what it was given is no longer the evidence. |
+| `denominators` | Review advice | A 0.90 recall bar over seven positives is arithmetically identical to 1.0. A threshold and a corpus size live in different files and nothing compared them. |
+| `replay` + `recording` | A live model call in the gate, or nothing at all | Every offline metric scores a template adapter that structurally cannot invent a figure, so `groundedness` measures the validator rather than the model. Record once by hand, scrub the whole batch or write nothing, replay offline forever. |
+| `golden` | A hand-written corpus beside a hand-written demo | Two corpora describing the same system diverge on the first edit, invisibly: the demo narrates one set of clients and the gate measures another, both green. Inputs are rendered; expectations are hand-written and never derived, because an oracle computed from the thing under test agrees with it by construction. |
+| `narrative` | A per-repo judged runner | Judging is where a metric turns into decoration most easily, so the runner carries the four defences: an offline default judge chosen on the command line and never from the environment, a floor owned as data, an expectation TABLE so a profile that quietly got better also fails, and a check that the table itself is falsifiable before a single narrative is graded. |
+| `harness.prove_before_scoring` | A falsification proof that lives only in `tests/` | Run in the test suite, the proof says the metric could have gone red on some machine at some point. Run as the first statement of the scored run, it says the metric about to score this corpus can go red, in this process, with these thresholds. |
 
 The judge and the floors close the third gap. Every eval in the fleet scored a deterministic core
 against a deterministic fake model, so nothing measured model NARRATIVE quality, and the profile
