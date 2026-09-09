@@ -142,20 +142,37 @@ class Rubrics:
     """Every reviewed bar in one rubric tree, addressable by metric name."""
 
     def __init__(self, rubrics: Iterable[Rubric], *, root: str = "") -> None:
-        self._by_metric: dict[str, Rubric] = {}
+        # Keyed by (group, metric), not by metric alone. A repository that gates two families
+        # in one run legitimately reuses metric NAMES across them: a design review and a
+        # data-residency scan both have a `citation_accuracy`, and they are different questions
+        # that may carry different bars. Keying on the name alone silently collapsed the two, so
+        # whichever file sorted last won and the other family's rubric vanished from the tree
+        # while still sitting on disk looking authoritative.
+        #
+        # "One metric, one bar" still holds WITHIN a group, which is where it was always meant to
+        # apply: two files in the same directory disagreeing about the same metric is a mistake.
+        self._by_key: dict[tuple[str, str], Rubric] = {}
         self._root = root
         for rubric in rubrics:
-            existing = self._by_metric.get(rubric.metric)
+            key = (rubric.group, rubric.metric)
+            existing = self._by_key.get(key)
             if existing is not None and existing.threshold != rubric.threshold:
+                where = f" in group {rubric.group!r}" if rubric.group else ""
                 raise RubricError(
                     f"metric {rubric.metric!r} is given {rubric.threshold} in {rubric.source} "
-                    f"and {existing.threshold} in {existing.source}. One metric, one bar."
+                    f"and {existing.threshold} in {existing.source}{where}. One metric, one bar."
                 )
-            self._by_metric[rubric.metric] = rubric
-        if not self._by_metric:
+            self._by_key[key] = rubric
+        if not self._by_key:
             raise RubricError(
                 f"{root or 'rubrics'}: no metric has a threshold, so nothing is gated"
             )
+        #: Name-keyed view, for the common single-family case. Where a name appears in more than
+        #: one group this holds the first in sorted order; a caller that gates two families
+        #: should narrow with :meth:`group` first, which is what makes the bars unambiguous.
+        self._by_metric: dict[str, Rubric] = {}
+        for (_group, metric), rubric in sorted(self._by_key.items()):
+            self._by_metric.setdefault(metric, rubric)
 
     @property
     def root(self) -> str:
@@ -163,13 +180,19 @@ class Rubrics:
 
     @property
     def metrics(self) -> tuple[str, ...]:
-        return tuple(sorted(self._by_metric))
+        """Every metric name in this tree, deduplicated across groups."""
+        return tuple(sorted({metric for _group, metric in self._by_key}))
 
     def __len__(self) -> int:
-        return len(self._by_metric)
+        return len(self._by_key)
+
+    @property
+    def groups(self) -> tuple[str, ...]:
+        """Every named group in this tree, in sorted order. ``""`` is the top level."""
+        return tuple(sorted({group for group, _metric in self._by_key}))
 
     def __iter__(self) -> Iterator[Rubric]:
-        return iter(self._by_metric[name] for name in self.metrics)
+        return iter(self._by_key[key] for key in sorted(self._by_key))
 
     def __contains__(self, metric: object) -> bool:
         return metric in self._by_metric
@@ -190,12 +213,12 @@ class Rubrics:
 
     def group(self, name: str) -> Rubrics:
         """The sub-tree of rubrics filed under ``name``, for a repo gating two releases."""
-        selected = [rubric for rubric in self if rubric.group == name]
+        selected = [rubric for (group, _metric), rubric in self._by_key.items() if group == name]
         if not selected:
-            groups = sorted({rubric.group for rubric in self if rubric.group})
+            named = sorted(group for group in self.groups if group)
             raise RubricError(
                 f"{self._root or 'rubrics'}: no rubric group named {name!r} "
-                f"(groups: {groups or 'none; this tree is flat'})"
+                f"(groups: {named or 'none; this tree is flat'})"
             )
         return Rubrics(selected, root=f"{self._root}/{name}")
 

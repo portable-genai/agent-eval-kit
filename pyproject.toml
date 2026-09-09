@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agent-eval-kit"
-version = "0.0.2"
+version = "0.0.3"
 description = "The shared evaluation scaffold for hexagonal service repos: the EvalReport/EvalMetricResult types and their rendering, a run_eval.py --mode smoke|gate CLI scaffold (offline heuristic vs a shared promotion authority), a promotion-gate HTTP client (structured target, registered bundle, results[] parse, POST gate), a not-falsely-green harness that turns 'prove this metric can go red' into a one-liner, reviewed thresholds read from rubric files rather than module constants, comment-tolerant golden-set loading that refuses the vacuous shapes, retrieval-quality scoring (recall@k / precision@k / MRR), the denominator rule that catches a 1.0 wearing a 0.90 label, offline replay of recorded managed-model output, and an offline narrative-quality judge with per-vertical quality floors (deterministic by default, a local model server by opt-in). Pure standard library except the two HTTP clients (httpx) and optional YAML rubric reading (PyYAML), neither of which the package imports."
 readme = "README.md"
 requires-python = ">=3.12"
