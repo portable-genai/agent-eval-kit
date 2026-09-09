@@ -133,8 +133,23 @@ def test_it_reads_the_real_exemplar_tree_in_this_workspace():
     if not root.is_dir():  # pragma: no cover - the kit is also built standalone
         pytest.skip("the exemplar repository is not checked out beside this one")
     rubrics = load_rubrics(root, groups=("agent_assist", "self_service"))
-    assert rubrics.group("self_service")["gate_precision"].threshold == 1.0
-    assert rubrics.group("agent_assist")["pii_safety"].threshold == 0.99
+    # Structure, never a particular bar. This pinned `pii_safety` at 0.99 and broke the day that
+    # repository raised it, which is the wrong coupling entirely: a kit test that fails when a
+    # consumer tunes a reviewed number is a kit test that punishes the consumer for governing.
+    # What is asserted is what this loader promises: both groups resolve, each carries metrics,
+    # every bar is a real number in range, and the two groups are separate namespaces.
+    agent_assist = rubrics.group("agent_assist")
+    self_service = rubrics.group("self_service")
+    assert list(agent_assist), "the agent_assist group resolved to no metrics"
+    assert list(self_service), "the self_service group resolved to no metrics"
+    for group in (agent_assist, self_service):
+        for rubric in group:
+            assert 0.0 <= rubric.threshold <= 1.0
+            assert rubric.description.strip(), f"{rubric.metric} states a bar with no description"
+    assert agent_assist.thresholds() != self_service.thresholds(), (
+        "the two groups resolved to the same bars, so this tree cannot demonstrate that groups "
+        "are separate namespaces and the test proves nothing about the keying"
+    )
 
 
 # --------------------------------------------------------------------------- #
