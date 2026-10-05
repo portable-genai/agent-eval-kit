@@ -40,7 +40,7 @@ yaml = ["pyyaml>=6.0"]
 # pyyaml is here because the rubric loader's YAML path has to be TESTED even though it is
 # optional at runtime; `tests/test_core_purity.py` proves the package still imports without it.
 dev = [
-  "ruff==0.16.7",
+  "ruff==0.16.10",
   "mypy>=1.10",
   "pytest>=8.2",
   "respx>=0.21",
